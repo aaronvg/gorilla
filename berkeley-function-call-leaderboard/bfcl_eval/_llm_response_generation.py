@@ -64,11 +64,17 @@ def get_args():
     return args
 
 
-def build_handler(model_name, temperature):
-    config = MODEL_CONFIG_MAPPING[model_name]
-    handler = config.model_handler(model_name, temperature)
-    # Propagate config flags to the handler instance
-    handler.is_fc_model = config.is_fc_model
+def build_handler(model_name, temperature, tool_format="default"):
+    if tool_format == "baml":
+        # Use BAML handler for all models when --tool-format baml is set
+        from bfcl_eval.model_handler.baml_handler import BAMLHandler
+        handler = BAMLHandler(model_name, temperature)
+    else:
+        # Use existing handler selection logic
+        config = MODEL_CONFIG_MAPPING[model_name]
+        handler = config.model_handler(model_name, temperature)
+        # Propagate config flags to the handler instance
+        handler.is_fc_model = config.is_fc_model
     return handler
 
 
@@ -226,7 +232,12 @@ def multi_threaded_inference(handler, test_case, include_input_log, exclude_stat
 
 def generate_results(args, model_name, test_cases_total):
     update_mode = args.allow_overwrite
-    handler = build_handler(model_name, args.temperature)
+    # Extract original model name if using BAML (remove -baml suffix)
+    original_model_name = model_name
+    if model_name.endswith('-baml'):
+        original_model_name = model_name[:-5]  # Remove '-baml' suffix
+    
+    handler = build_handler(original_model_name, args.temperature, getattr(args, 'tool_format', 'default'))
 
     if handler.model_style == ModelStyle.OSSMODEL:
         # batch_inference will handle the writing of results
@@ -301,9 +312,14 @@ def main(args):
         args.result_dir = RESULT_PATH
 
     for model_name in args.model:
+        # Modify model name for BAML mode to avoid result collision
+        effective_model_name = model_name
+        if getattr(args, 'tool_format', 'default') == 'baml':
+            effective_model_name = f"{model_name}-baml"
+        
         test_cases_total = collect_test_cases(
             args,
-            model_name,
+            effective_model_name,
             all_test_categories,
             all_test_file_paths,
             all_test_entries_involved,
@@ -311,7 +327,7 @@ def main(args):
 
         if len(test_cases_total) == 0:
             print(
-                f"All selected test cases have been previously generated for {model_name}. No new test cases to generate."
+                f"All selected test cases have been previously generated for {effective_model_name}. No new test cases to generate."
             )
         else:
-            generate_results(args, model_name, test_cases_total)
+            generate_results(args, effective_model_name, test_cases_total)

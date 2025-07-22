@@ -148,6 +148,11 @@ def generate(
         "--run-ids",
         help="If true, also run the test entry mentioned in the test_case_ids_to_generate.json file, in addition to the --test_category argument.",
     ),
+    tool_format: str = typer.Option(
+        "default",
+        "--tool-format",
+        help="Tool format to use for function calling. Options: 'default' (existing behavior), 'baml' (use BAML for all models).",
+    ),
 ):
     """
     Generate the LLM response for one or more models on a test-category (same as openfunctions_evaluation.py).
@@ -168,6 +173,7 @@ def generate(
         result_dir=result_dir,
         allow_overwrite=allow_overwrite,
         run_ids=run_ids,
+        tool_format=tool_format,
     )
     load_dotenv(dotenv_path=DOTENV_PATH, verbose=True, override=True)  # Load the .env file
     generation_main(args)
