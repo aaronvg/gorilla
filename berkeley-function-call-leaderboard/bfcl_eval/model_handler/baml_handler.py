@@ -40,8 +40,6 @@ class BAMLHandler(BaseHandler):
         # This can be extended to read from config if needed
         return None
 
-
-
     def _create_client_registry(self, **kwargs) -> ClientRegistry:
         """Create BAML client with auto-detected provider."""
         cr = ClientRegistry()
@@ -90,10 +88,12 @@ class BAMLHandler(BaseHandler):
 
         raise ValueError(f"Unknown provider: {provider}")
 
-    def _get_baml_field_type(self, schema: Dict[str, Any], tb: TypeBuilder, required: bool = True):
+    def _get_baml_field_type(
+        self, schema: Dict[str, Any], tb: TypeBuilder, required: bool = True
+    ):
         """Convert JSON schema to BAML FieldType using TypeBuilder APIs."""
         schema_type = schema.get("type", "string")
-        
+
         if schema_type == "string":
             if "enum" in schema:
                 # Create enum for string literals
@@ -117,21 +117,24 @@ class BAMLHandler(BaseHandler):
                 # Generate random name for nested class
                 import random
                 import string
+
                 class_name = "".join(random.choices(string.ascii_lowercase, k=10))
                 nested_class = tb.add_class(class_name)
-                
+
                 nested_required = schema.get("required", [])
                 for prop_name, prop_schema in schema["properties"].items():
                     prop_required = prop_name in nested_required
-                    prop_type = self._get_baml_field_type(prop_schema, tb, prop_required)
-                    
+                    prop_type = self._get_baml_field_type(
+                        prop_schema, tb, prop_required
+                    )
+
                     if not prop_required:
                         prop_type = prop_type.optional()
-                    
+
                     property_builder = nested_class.add_property(prop_name, prop_type)
                     if "description" in prop_schema:
                         property_builder.description(prop_schema["description"])
-                
+
                 return nested_class.type()
             else:
                 return tb.map(tb.string(), tb.string())
@@ -139,19 +142,35 @@ class BAMLHandler(BaseHandler):
             # Default to string for unknown types
             return tb.string()
 
-    def _build_tool_types(self, tools: List[Dict[str, Any]], tb: TypeBuilder, test_category: str) -> None:
+    def _build_tool_types(
+        self, tools: List[Dict[str, Any]], tb: TypeBuilder, test_category: str
+    ) -> None:
         """Build BAML types from tool schemas and add to TypeBuilder."""
         if not tools:
             return
 
-        is_simple = test_category in ['relevance', 'java', 'javascript', 'simple', 'parallel_function', 'executable_simple', 'executable_parallel_function', 'rest']
-        is_multiple = test_category in ['multiple_function', 'parallel_multiple_function', 'executable_multiple_function', 'executable_parallel_multiple_function']
+        is_simple = test_category in [
+            "relevance",
+            "java",
+            "javascript",
+            "simple",
+            "parallel_function",
+            "executable_simple",
+            "executable_parallel_function",
+            "rest",
+        ]
+        is_multiple = test_category in [
+            "multiple_function",
+            "parallel_multiple_function",
+            "executable_multiple_function",
+            "executable_parallel_multiple_function",
+        ]
 
         if is_simple:
             # For simple functions, Response directly contains the tool parameters
             assert len(tools) == 1
             tool = tools[0]
-            
+
             # Extract function info
             if "function" in tool:
                 func_schema = tool["function"]["parameters"]
@@ -163,20 +182,22 @@ class BAMLHandler(BaseHandler):
                 func_description = tool.get("description", "")
 
             # Add function_name for relevance test category
-            if 'relevance' in test_category:
+            if "relevance" in test_category:
                 # Create enum with function name
                 func_enum = tb.add_enum(f"{func_name}_enum")
                 func_enum.add_value(func_name)
-                tb.Response.add_property("function_name", func_enum.type()).description(func_description)
+                tb.Response.add_property("function_name", func_enum.type()).description(
+                    func_description
+                )
 
             # Add all function parameters to Response class
             required_props = func_schema.get("required", [])
             for prop_name, prop_schema in func_schema.get("properties", {}).items():
                 prop_type = self._get_baml_field_type(prop_schema, tb)
-                
+
                 if prop_name not in required_props:
                     prop_type = prop_type.optional()
-                
+
                 property_builder = tb.Response.add_property(prop_name, prop_type)
                 if "description" in prop_schema:
                     description = prop_schema["description"]
@@ -187,7 +208,7 @@ class BAMLHandler(BaseHandler):
         elif is_multiple:
             # For multiple functions, Response contains a union of function classes
             tool_classes = []
-            
+
             for tool in tools:
                 # Extract function info
                 if "function" in tool:
@@ -201,27 +222,29 @@ class BAMLHandler(BaseHandler):
 
                 # Create class for this function
                 func_class = tb.add_class(func_name)
-                
+
                 # Add function_name enum
                 func_enum = tb.add_enum(f"{func_name}_enum")
                 func_enum.add_value(func_name)
-                func_class.add_property("function_name", func_enum.type()).description(func_description)
+                func_class.add_property("function_name", func_enum.type()).description(
+                    func_description
+                )
 
                 # Add all function parameters
                 required_props = func_schema.get("required", [])
                 for prop_name, prop_schema in func_schema.get("properties", {}).items():
                     prop_type = self._get_baml_field_type(prop_schema, tb)
-                    
+
                     if prop_name not in required_props:
                         prop_type = prop_type.optional()
-                    
+
                     property_builder = func_class.add_property(prop_name, prop_type)
                     if "description" in prop_schema:
                         description = prop_schema["description"]
                         if "default" in prop_schema and prop_schema["default"]:
                             description += f". Default to '{prop_schema['default']}'"
                         property_builder.description(description)
-                
+
                 tool_classes.append(func_class.type())
 
             # Add union property to Response
@@ -265,12 +288,12 @@ class BAMLHandler(BaseHandler):
 
     def decode_ast(self, result, language="Python"):
         """Decode AST from BAML response."""
+        # result should be a list of function calls in FC format: [{"func_name": "json_string"}]
         if result is None:
             return []
 
         decoded_output = []
         
-        # result should be a list of function calls from _parse_query_response_FC
         if isinstance(result, list):
             for invoked_function in result:
                 if invoked_function and isinstance(invoked_function, dict):
@@ -279,7 +302,11 @@ class BAMLHandler(BaseHandler):
                     
                     # Parse the JSON string back to dict
                     try:
-                        params = json.loads(params_json) if isinstance(params_json, str) else params_json
+                        params = (
+                            json.loads(params_json)
+                            if isinstance(params_json, str)
+                            else params_json
+                        )
                         # Remove None values and function_name if it exists
                         params = {
                             key: value
@@ -305,30 +332,36 @@ class BAMLHandler(BaseHandler):
             return []
 
         execution_list = []
-        
+
         # result should be a list of function calls from _parse_query_response_FC
         if isinstance(result, list):
             for invoked_function in result:
                 if invoked_function and isinstance(invoked_function, dict):
                     name = list(invoked_function.keys())[0]
                     params_json = invoked_function[name]
-                    
+
                     # Parse the JSON string back to dict
                     try:
-                        params = json.loads(params_json) if isinstance(params_json, str) else params_json
+                        params = (
+                            json.loads(params_json)
+                            if isinstance(params_json, str)
+                            else params_json
+                        )
                         # Remove None values and function_name if it exists
                         params = {
                             key: value
                             for key, value in params.items()
                             if value is not None and key != "function_name"
                         }
-                        
+
                         # Format as function call
-                        execution_list.append(f"{name}({','.join([f'{k}={repr(v)}' for k, v in params.items()])})")
+                        execution_list.append(
+                            f"{name}({','.join([f'{k}={repr(v)}' for k, v in params.items()])})"
+                        )
                     except (json.JSONDecodeError, TypeError):
                         # Handle case where params_json is not valid JSON
                         execution_list.append(f"{name}()")
-        
+
         return execution_list
 
     #### FC methods ####
@@ -337,9 +370,9 @@ class BAMLHandler(BaseHandler):
         """Determine which BAML function to call based on test characteristics."""
         functions = test_entry.get("function", [])
         test_id = test_entry.get("id", "")
-        
+
         num_functions = len(functions)
-        
+
         # Check test ID for hints about test type
         if "parallel" in test_id.lower():
             if num_functions == 1:
@@ -375,7 +408,7 @@ class BAMLHandler(BaseHandler):
         try:
             # Get the appropriate BAML function
             baml_function = getattr(b, baml_function_name)
-            
+
             # Call BAML function with Function[] format
             result = baml_function(
                 functions=functions_data,
@@ -402,7 +435,10 @@ class BAMLHandler(BaseHandler):
                         json.dumps(result) if isinstance(result, dict) else str(result)
                     )
 
-            return MockResponse(result, test_category, functions_data), end_time - start_time
+            return (
+                MockResponse(result, test_category, functions_data),
+                end_time - start_time,
+            )
 
         except Exception as e:
             end_time = time.time()
@@ -443,15 +479,19 @@ class BAMLHandler(BaseHandler):
         for func in functions:
             if "function" in func:
                 func_info = func["function"]
-                functions_data.append({
-                    "name": func_info["name"],
-                    "description": func_info.get("description", "")
-                })
+                functions_data.append(
+                    {
+                        "name": func_info["name"],
+                        "description": func_info.get("description", ""),
+                    }
+                )
             else:
-                functions_data.append({
-                    "name": func.get("name", "UnknownFunction"),
-                    "description": func.get("description", "")
-                })
+                functions_data.append(
+                    {
+                        "name": func.get("name", "UnknownFunction"),
+                        "description": func.get("description", ""),
+                    }
+                )
 
         inference_data["type_builder"] = tb
         inference_data["client_registry"] = client_registry
@@ -467,15 +507,75 @@ class BAMLHandler(BaseHandler):
         try:
             # Extract result from BAML response
             result = api_response.result
-            test_category = getattr(api_response, 'test_category', 'simple')
+            test_category = getattr(api_response, "test_category", "simple")
+            functions_data = getattr(api_response, "functions_data", [])
 
-            is_simple = test_category in ['relevance', 'java', 'javascript', 'simple', 'parallel_function', 'executable_simple', 'executable_parallel_function', 'rest']
-            is_multiple = test_category in ['multiple_function', 'parallel_multiple_function', 'executable_multiple_function', 'executable_parallel_multiple_function']
+
+            is_simple = test_category in [
+                "relevance",
+                "java",
+                "javascript",
+                "simple",
+                "parallel_function",
+                "executable_simple",
+                "executable_parallel_function",
+                "rest",
+            ]
+            is_multiple = test_category in [
+                "multiple_function",
+                "parallel_multiple_function",
+                "executable_multiple_function",
+                "executable_parallel_multiple_function",
+            ]
 
             model_responses = []
             tool_call_ids = []
 
-            if isinstance(result, list):
+            # Handle case where BAML returns a Response object with string representation
+            if hasattr(result, '__class__') and 'Response' in str(type(result)):
+                # BAML Response object - need to convert string representation to dict
+                result_str = str(result)
+                
+                # For simple functions, infer function name from functions_data
+                if is_simple and functions_data and len(functions_data) == 1:
+                    func_name = functions_data[0]["name"]
+                    
+                    # Parse the string representation "param1=value1 param2=value2"
+                    params = {}
+                    if result_str and result_str != "None":
+                        # Split by spaces, but handle quoted values
+                        import re
+                        # Match param=value or param='value with spaces'
+                        matches = re.findall(r'(\w+)=([\'"]?)([^\'"]+?)\2(?:\s|$)', result_str)
+                        for param_name, _, param_value in matches:
+                            # Convert None string to actual None
+                            if param_value == "None":
+                                param_value = None
+                            else:
+                                # Try to parse numbers
+                                try:
+                                    if '.' in param_value:
+                                        param_value = float(param_value)
+                                    else:
+                                        param_value = int(param_value)
+                                except ValueError:
+                                    # Keep as string
+                                    pass
+                            
+                            # Only add non-None values to params
+                            if param_value is not None:
+                                params[param_name] = param_value
+                    
+                    # Create the FC format response
+                    model_responses = [{func_name: json.dumps(params)}]
+                    tool_call_ids = [func_name]
+                else:
+                    # For other test types, we'll need to implement parsing logic
+                    # For now, return empty response
+                    model_responses = []
+                    tool_call_ids = []
+                    
+            elif isinstance(result, list):
                 # Response[] - multiple function calls (parallel functions)
                 for call in result:
                     if isinstance(call, dict):
@@ -483,23 +583,37 @@ class BAMLHandler(BaseHandler):
                             # For simple parallel functions, extract function_name if exists
                             func_name = call.get("function_name")
                             if func_name:
-                                params = {k: v for k, v in call.items() if k != "function_name" and v is not None}
+                                params = {
+                                    k: v
+                                    for k, v in call.items()
+                                    if k != "function_name" and v is not None
+                                }
                                 model_responses.append({func_name: json.dumps(params)})
                                 tool_call_ids.append(func_name)
                             else:
                                 # Parallel function without function_name - infer from the single function
-                                functions_data = getattr(api_response, 'functions_data', [])
+                                functions_data = getattr(
+                                    api_response, "functions_data", []
+                                )
                                 if functions_data and len(functions_data) == 1:
                                     func_name = functions_data[0]["name"]
-                                    params = {k: v for k, v in call.items() if v is not None}
-                                    model_responses.append({func_name: json.dumps(params)})
+                                    params = {
+                                        k: v for k, v in call.items() if v is not None
+                                    }
+                                    model_responses.append(
+                                        {func_name: json.dumps(params)}
+                                    )
                                     tool_call_ids.append(func_name)
                         elif is_multiple and "function" in call:
                             # For multiple parallel functions, handle the function union
                             func_data = call["function"]
                             func_name = func_data.get("function_name")
                             if func_name:
-                                params = {k: v for k, v in func_data.items() if k != "function_name" and v is not None}
+                                params = {
+                                    k: v
+                                    for k, v in func_data.items()
+                                    if k != "function_name" and v is not None
+                                }
                                 model_responses.append({func_name: json.dumps(params)})
                                 tool_call_ids.append(func_name)
 
@@ -510,12 +624,16 @@ class BAMLHandler(BaseHandler):
                     func_name = result.get("function_name")
                     if func_name:
                         # Relevance function with function_name
-                        params = {k: v for k, v in result.items() if k != "function_name" and v is not None}
+                        params = {
+                            k: v
+                            for k, v in result.items()
+                            if k != "function_name" and v is not None
+                        }
                         model_responses = [{func_name: json.dumps(params)}]
                         tool_call_ids = [func_name]
                     else:
                         # Simple function without function_name - infer from the single function
-                        functions_data = getattr(api_response, 'functions_data', [])
+                        functions_data = getattr(api_response, "functions_data", [])
                         if functions_data and len(functions_data) == 1:
                             func_name = functions_data[0]["name"]
                             params = {k: v for k, v in result.items() if v is not None}
@@ -524,13 +642,17 @@ class BAMLHandler(BaseHandler):
                         else:
                             model_responses = []
                             tool_call_ids = []
-                        
+
                 elif is_multiple and "function" in result:
                     # For multiple functions, extract from the function union
                     func_data = result["function"]
                     func_name = func_data.get("function_name")
                     if func_name:
-                        params = {k: v for k, v in func_data.items() if k != "function_name" and v is not None}
+                        params = {
+                            k: v
+                            for k, v in func_data.items()
+                            if k != "function_name" and v is not None
+                        }
                         model_responses = [{func_name: json.dumps(params)}]
                         tool_call_ids = [func_name]
 
@@ -546,7 +668,11 @@ class BAMLHandler(BaseHandler):
 
         except Exception as e:
             # Handle error case
-            model_responses = str(getattr(api_response, 'choices', [{'message': {'content': str(e)}}])[0]['message']['content'])
+            model_responses = str(
+                getattr(api_response, "choices", [{"message": {"content": str(e)}}])[0][
+                    "message"
+                ]["content"]
+            )
             tool_call_ids = []
 
         # Mock message for chat history

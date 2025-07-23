@@ -76,9 +76,10 @@ class OpenAIResponsesHandler(BaseHandler):
             "input": message,
             "model": self.model_name.replace("-FC", ""),
             "store": False,
-            "include": ["reasoning.encrypted_content"],
             "reasoning": {"summary": "auto"},
         }
+        if "gpt-4o-mini" not in self.model_name:
+            kwargs["include"] = ["reasoning.encrypted_content"]
 
         # OpenAI reasoning models don't support temperature parameter
         if "o3" not in self.model_name and "o4-mini" not in self.model_name:
@@ -181,15 +182,18 @@ class OpenAIResponsesHandler(BaseHandler):
     #### Prompting methods ####
 
     def _query_prompting(self, inference_data: dict):
-        inference_data["inference_input_log"] = {"message": repr(inference_data["message"])}
+        inference_data["inference_input_log"] = {
+            "message": repr(inference_data["message"])
+        }
 
         kwargs = {
             "input": inference_data["message"],
             "model": self.model_name.replace("-FC", ""),
             "store": False,
-            "include": ["reasoning.encrypted_content"],
             "reasoning": {"summary": "auto"},
         }
+        if "gpt-4o-mini" not in self.model_name:
+            kwargs["include"] = ["reasoning.encrypted_content"]
 
         # OpenAI reasoning models don't support temperature parameter
         if "o3" not in self.model_name and "o4-mini" not in self.model_name:

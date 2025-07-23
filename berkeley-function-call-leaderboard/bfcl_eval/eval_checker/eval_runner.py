@@ -27,6 +27,20 @@ from tqdm import tqdm
 
 
 def get_handler(model_name):
+    # Handle BAML suffix - use original model config but with BAML handler
+    if model_name.endswith("-baml"):
+        original_model_name = model_name[:-5]  # Remove "-baml" suffix
+        if original_model_name in MODEL_CONFIG_MAPPING:
+            config = MODEL_CONFIG_MAPPING[original_model_name]
+            # Import BAMLHandler here to avoid circular imports
+            from bfcl_eval.model_handler.baml_handler import BAMLHandler
+            handler = BAMLHandler(original_model_name, temperature=0)
+            handler.is_fc_model = True  # BAML always works in FC mode
+            return handler
+        else:
+            # Fallback: try the full name in case it's actually configured
+            pass
+    
     config = MODEL_CONFIG_MAPPING[model_name]
     handler = config.model_handler(
         model_name, temperature=0
@@ -491,7 +505,11 @@ def main(model, test_categories, result_dir, score_dir):
     if model:
         model_names = []
         for model_name in model:
-            if model_name not in MODEL_CONFIG_MAPPING:
+            # Handle -baml suffix for model validation
+            config_lookup_name = model_name
+            if model_name.endswith("-baml"):
+                config_lookup_name = model_name[:-5]
+            if config_lookup_name not in MODEL_CONFIG_MAPPING:
                 raise ValueError(f"Invalid model name '{model_name}'.")
             # Runner takes in the model name that contains "_", instead of "/", for the sake of file path issues.
             # This is differnet than the model name format that the generation script "openfunctions_evaluation.py" takes in (where the name contains "/").

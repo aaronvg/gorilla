@@ -294,7 +294,11 @@ def main(args):
     ) = get_involved_test_entries(args.test_category, args.run_ids)
 
     for model_name in args.model:
-        if model_name not in MODEL_CONFIG_MAPPING:
+        # Handle -baml suffix for model validation
+        config_lookup_name = model_name
+        if model_name.endswith("-baml"):
+            config_lookup_name = model_name[:-5]
+        if config_lookup_name not in MODEL_CONFIG_MAPPING:
             raise ValueError(
                         f"Unknown model_name '{model_name}'.\n"
                         "• For officially supported models, please refer to `SUPPORTED_MODELS.md`.\n"

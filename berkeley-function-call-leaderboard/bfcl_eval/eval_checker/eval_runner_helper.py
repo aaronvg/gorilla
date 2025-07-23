@@ -110,7 +110,11 @@ def record_cost_latency(leaderboard_table, model_name, model_output_data):
 
 def get_cost_latency_info(model_name, cost_data, latency_data):
     cost, mean_latency, std_latency, percentile_95_latency = "N/A", "N/A", "N/A", "N/A"
-    model_config = MODEL_CONFIG_MAPPING[model_name]
+    # Strip -baml suffix for model config lookup
+    config_lookup_name = model_name
+    if model_name.endswith("-baml"):
+        config_lookup_name = model_name[:-5]
+    model_config = MODEL_CONFIG_MAPPING[config_lookup_name]
 
     # For API models, we use the input and output token counts to calculate the cost
     if model_config.input_price is not None and model_config.output_price is not None:
@@ -200,6 +204,9 @@ def generate_leaderboard_csv(
     data_combined = []
     for model_name, value in leaderboard_table.items():
         model_name_escaped = model_name.replace("_", "/")
+        # Strip -baml suffix for model config lookup
+        if model_name_escaped.endswith("-baml"):
+            model_name_escaped = model_name_escaped[:-5]
         model_config = MODEL_CONFIG_MAPPING[model_name_escaped]
 
         cost_data = value.get("cost", {"input_data": [], "output_data": []})
