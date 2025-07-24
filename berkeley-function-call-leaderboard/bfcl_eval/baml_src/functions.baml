@@ -18,6 +18,8 @@ function SimpleFunction(functions: Function[], query: string) -> Response {
 
         If a parameter isn't explicitly mentioned, don't assume any values unless its certain.
 
+        For null fields, WRITE THE DEFAULT VALUE.
+
         {{ ctx.output_format }}
 
         {{ _.role('user') }}

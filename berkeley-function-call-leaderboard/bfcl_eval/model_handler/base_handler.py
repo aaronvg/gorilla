@@ -614,6 +614,14 @@ class BaseHandler:
         ):
             metadata["reasoning_content"] = model_response_data["reasoning_content"]
 
+        # Add HTTP request information if available (for BAML handler)
+        if inference_data.get("http_request"):
+            metadata["http_request"] = inference_data["http_request"]
+            
+        # Add raw LLM response if available (for BAML handler)
+        if model_response_data.get("raw_llm_response"):
+            metadata["raw_llm_response"] = model_response_data["raw_llm_response"]
+
         return model_response_data["model_responses"], metadata
 
     @final

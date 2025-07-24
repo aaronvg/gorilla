@@ -249,6 +249,10 @@ def relevance_file_runner(
             temp["prompt"] = prompt[i]
             temp["model_result"] = model_result_item
             temp["decoded_result"] = decoded_result
+            
+            # Add HTTP request information if available
+            if model_result[i].get("http_request"):
+                temp["http_request"] = model_result[i]["http_request"]
 
             result.append(temp)
 
@@ -291,7 +295,8 @@ def ast_file_runner(
         possible_answer_item = possible_answer[i]["ground_truth"]
 
         try:
-            model_result_item_raw = model_result_item
+            # Use raw LLM response if available (for BAML), otherwise use the result
+            model_result_item_raw = model_result[i].get("raw_llm_response", model_result_item)
             model_result_item = handler.decode_ast(model_result_item, language)
         except Exception as e:
             result.append(
@@ -307,6 +312,11 @@ def ast_file_runner(
                     "possible_answer": possible_answer_item,
                 }
             )
+            
+            # Add HTTP request information if available
+            if model_result[i].get("http_request"):
+                result[-1]["http_request"] = model_result[i]["http_request"]
+                
             continue
 
         decoder_output_valid = is_function_calling_format_output(model_result_item)
@@ -327,6 +337,11 @@ def ast_file_runner(
                     "possible_answer": possible_answer_item,
                 }
             )
+            
+            # Add HTTP request information if available
+            if model_result[i].get("http_request"):
+                result[-1]["http_request"] = model_result[i]["http_request"]
+                
             continue
 
         checker_result = ast_checker(
@@ -352,6 +367,11 @@ def ast_file_runner(
             temp["model_result_raw"] = model_result_item_raw
             temp["model_result_decoded"] = model_result_item
             temp["possible_answer"] = possible_answer_item
+            
+            # Add HTTP request information if available
+            if model_result[i].get("http_request"):
+                temp["http_request"] = model_result[i]["http_request"]
+                
             result.append(temp)
 
     accuracy = correct_count / len(model_result)

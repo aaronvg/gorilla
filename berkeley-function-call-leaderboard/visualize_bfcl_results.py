@@ -451,102 +451,104 @@ def main():
             
         # Right column: Question details and results
         with col_right:
-            if filtered_questions and selected_question_idx is not None and selected_question_idx < len(filtered_questions):
-                selected_question = filtered_questions[selected_question_idx]
-                question_id = selected_question["id"]
-                category = selected_question["category"]
-                question_data = selected_question["question"]
-                
-                st.subheader(f"Question: {question_id}")
-                
-                # Display the question content (not the wrapper JSON)
-                with st.expander("Question Details", expanded=True):
-                    # Extract the actual question content
-                    if "question" in question_data:
-                        st.write(question_data["question"])
+            # Create a scrollable container for the question details
+            with st.container(height=800):
+                if filtered_questions and selected_question_idx is not None and selected_question_idx < len(filtered_questions):
+                    selected_question = filtered_questions[selected_question_idx]
+                    question_id = selected_question["id"]
+                    category = selected_question["category"]
+                    question_data = selected_question["question"]
                     
-                    # Show function if available
-                    if "function" in question_data:
-                        st.write("**Function:**")
-                        st.json(question_data["function"])
+                    st.subheader(f"Question: {question_id}")
                 
-                # Collect results by tool format
-                baml_results = []
-                fc_results = []
-                prompt_results = []
+                    # Display the question content (not the wrapper JSON)
+                    with st.expander("Question Details", expanded=True):
+                        # Extract the actual question content
+                        if "question" in question_data:
+                            st.write(question_data["question"])
+                        
+                        # Show function if available in a collapsed expander
+                        if "function" in question_data:
+                            with st.expander("View Function", expanded=False):
+                                st.json(question_data["function"])
+                    
+                    # Collect results by tool format
+                    baml_results = []
+                    fc_results = []
+                    prompt_results = []
                 
-                for model_name in data["results"]:
-                    if category in data["results"][model_name]:
-                        results = data["results"][model_name][category]
+                    for model_name in data["results"]:
+                        if category in data["results"][model_name]:
+                            results = data["results"][model_name][category]
                         
-                        # Find the result for this specific question
-                        question_result = None
-                        for result in results:
-                            if result.get("id") == question_id:
-                                question_result = result
-                                break
-                        
-                        if question_result:
-                            # Find the corresponding score
-                            score_result = None
-                            if model_name in data["models"] and category in data["models"][model_name]:
-                                scores = data["models"][model_name][category]
-                                for score in scores[1:]:  # Skip overall stats
-                                    if score.get("id") == question_id:
-                                        score_result = score
-                                        break
+                            # Find the result for this specific question
+                            question_result = None
+                            for result in results:
+                                if result.get("id") == question_id:
+                                    question_result = result
+                                    break
                             
-                            # When valid field is missing or True, the test passed
-                            # When valid is False, the test failed
-                            is_valid = True
-                            if score_result:
-                                if "valid" in score_result:
-                                    is_valid = score_result["valid"]
-                            else:
-                                # No score result means it might have passed
+                            if question_result:
+                                # Find the corresponding score - should exist for all tests
+                                score_result = None
+                                if model_name in data["models"] and category in data["models"][model_name]:
+                                    scores = data["models"][model_name][category]
+                                    for score in scores[1:]:  # Skip overall stats
+                                        if score.get("id") == question_id:
+                                            score_result = score
+                                            break
+                                
+                                # When valid field is missing or True, the test passed
+                                # When valid is False, the test failed
                                 is_valid = True
-                            
-                            result_data = {
-                                "model_name": model_name,
-                                "question_result": question_result,
-                                "score_result": score_result,
-                                "is_valid": is_valid
-                            }
-                            
-                            if "-baml" in model_name:
-                                baml_results.append(result_data)
-                            elif "-FC" in model_name:
-                                fc_results.append(result_data)
-                            else:
-                                prompt_results.append(result_data)
-                
-                # Create tabs for different tool formats
-                st.subheader("Model Results")
-                
-                # Build tab labels with pass/fail indicators
-                tab_labels = []
-                if baml_results:
-                    baml_status = "✅" if any(r["is_valid"] for r in baml_results) else "❌"
-                    tab_labels.append(f"BAML {baml_status}")
-                if fc_results:
-                    fc_status = "✅" if any(r["is_valid"] for r in fc_results) else "❌"
-                    tab_labels.append(f"FC {fc_status}")
-                if prompt_results:
-                    prompt_status = "✅" if any(r["is_valid"] for r in prompt_results) else "❌"
-                    tab_labels.append(f"Prompt {prompt_status}")
-                
-                if tab_labels:
-                    tabs = st.tabs(tab_labels)
-                    tab_index = 0
+                                if score_result:
+                                    if "valid" in score_result:
+                                        is_valid = score_result["valid"]
+                                else:
+                                    # No score result means it might have passed
+                                    is_valid = True
+                                
+                                result_data = {
+                                    "model_name": model_name,
+                                    "question_result": question_result,
+                                    "score_result": score_result,
+                                    "is_valid": is_valid
+                                }
+                                
+                                if "-baml" in model_name:
+                                    baml_results.append(result_data)
+                                elif "-FC" in model_name:
+                                    fc_results.append(result_data)
+                                else:
+                                    prompt_results.append(result_data)
                     
-                    # BAML tab
+                    # Create tabs for different tool formats
+                    st.subheader("Model Results")
+                
+                    # Build tab labels with pass/fail indicators
+                    tab_labels = []
                     if baml_results:
-                        with tabs[tab_index]:
-                            for result_data in baml_results:
-                                model_name = result_data["model_name"]
-                                question_result = result_data["question_result"]
-                                score_result = result_data["score_result"]
-                                is_valid = result_data["is_valid"]
+                        baml_status = "✅" if any(r["is_valid"] for r in baml_results) else "❌"
+                        tab_labels.append(f"BAML {baml_status}")
+                    if fc_results:
+                        fc_status = "✅" if any(r["is_valid"] for r in fc_results) else "❌"
+                        tab_labels.append(f"FC {fc_status}")
+                    if prompt_results:
+                        prompt_status = "✅" if any(r["is_valid"] for r in prompt_results) else "❌"
+                        tab_labels.append(f"Prompt {prompt_status}")
+                    
+                    if tab_labels:
+                        tabs = st.tabs(tab_labels)
+                        tab_index = 0
+                    
+                        # BAML tab
+                        if baml_results:
+                            with tabs[tab_index]:
+                                for result_data in baml_results:
+                                    model_name = result_data["model_name"]
+                                    question_result = result_data["question_result"]
+                                    score_result = result_data["score_result"]
+                                    is_valid = result_data["is_valid"]
                                 
                                 with st.expander(f"{model_name} {'✅' if is_valid else '❌'}", expanded=True):
                                     col1, col2 = st.columns([1, 1])
@@ -572,6 +574,30 @@ def main():
                                         st.write("**Raw Model Output:**")
                                         st.code(str(question_result["model_output"]))
                                     
+                                    # Display model_result_raw if available (contains raw LLM response)
+                                    model_result_raw = None
+                                    if score_result and "model_result_raw" in score_result:
+                                        model_result_raw = score_result["model_result_raw"]
+                                    elif question_result and "model_result_raw" in question_result:
+                                        model_result_raw = question_result["model_result_raw"]
+                                    
+                                    if model_result_raw is not None:
+                                        st.write("**Raw LLM Response:**")
+                                        with st.expander("View Raw LLM Response", expanded=False):
+                                            st.code(str(model_result_raw))
+                                    
+                                    # Display ground truth (possible_answer) if available
+                                    possible_answer = None
+                                    if score_result and "possible_answer" in score_result:
+                                        possible_answer = score_result["possible_answer"]
+                                    elif question_result and "possible_answer" in question_result:
+                                        possible_answer = question_result["possible_answer"]
+                                    
+                                    if possible_answer is not None:
+                                        st.write("**Ground Truth:**")
+                                        with st.expander("View Ground Truth", expanded=True):
+                                            st.json(possible_answer)
+                                    
                                     if score_result and "error" in score_result:
                                         st.write("**Error:**")
                                         error_list = score_result["error"]
@@ -584,6 +610,11 @@ def main():
                                     if score_result and "error_details" in score_result:
                                         st.write("**Error Details:**")
                                         st.error(score_result["error_details"])
+                                    
+                                    if score_result and "http_request" in score_result:
+                                        st.write("**HTTP Request:**")
+                                        with st.expander("View HTTP Request", expanded=False):
+                                            st.json(score_result["http_request"])
                         tab_index += 1
                     
                     # FC tab
@@ -619,6 +650,30 @@ def main():
                                         st.write("**Raw Model Output:**")
                                         st.code(str(question_result["model_output"]))
                                     
+                                    # Display model_result_raw if available (contains raw LLM response)
+                                    model_result_raw = None
+                                    if score_result and "model_result_raw" in score_result:
+                                        model_result_raw = score_result["model_result_raw"]
+                                    elif question_result and "model_result_raw" in question_result:
+                                        model_result_raw = question_result["model_result_raw"]
+                                    
+                                    if model_result_raw is not None:
+                                        st.write("**Raw LLM Response:**")
+                                        with st.expander("View Raw LLM Response", expanded=False):
+                                            st.code(str(model_result_raw))
+                                    
+                                    # Display ground truth (possible_answer) if available
+                                    possible_answer = None
+                                    if score_result and "possible_answer" in score_result:
+                                        possible_answer = score_result["possible_answer"]
+                                    elif question_result and "possible_answer" in question_result:
+                                        possible_answer = question_result["possible_answer"]
+                                    
+                                    if possible_answer is not None:
+                                        st.write("**Ground Truth:**")
+                                        with st.expander("View Ground Truth", expanded=True):
+                                            st.json(possible_answer)
+                                    
                                     if score_result and "error" in score_result:
                                         st.write("**Error:**")
                                         error_list = score_result["error"]
@@ -631,6 +686,11 @@ def main():
                                     if score_result and "error_details" in score_result:
                                         st.write("**Error Details:**")
                                         st.error(score_result["error_details"])
+                                    
+                                    if score_result and "http_request" in score_result:
+                                        st.write("**HTTP Request:**")
+                                        with st.expander("View HTTP Request", expanded=False):
+                                            st.json(score_result["http_request"])
                         tab_index += 1
                     
                     # Prompt tab
@@ -666,6 +726,30 @@ def main():
                                         st.write("**Raw Model Output:**")
                                         st.code(str(question_result["model_output"]))
                                     
+                                    # Display model_result_raw if available (contains raw LLM response)
+                                    model_result_raw = None
+                                    if score_result and "model_result_raw" in score_result:
+                                        model_result_raw = score_result["model_result_raw"]
+                                    elif question_result and "model_result_raw" in question_result:
+                                        model_result_raw = question_result["model_result_raw"]
+                                    
+                                    if model_result_raw is not None:
+                                        st.write("**Raw LLM Response:**")
+                                        with st.expander("View Raw LLM Response", expanded=False):
+                                            st.code(str(model_result_raw))
+                                    
+                                    # Display ground truth (possible_answer) if available
+                                    possible_answer = None
+                                    if score_result and "possible_answer" in score_result:
+                                        possible_answer = score_result["possible_answer"]
+                                    elif question_result and "possible_answer" in question_result:
+                                        possible_answer = question_result["possible_answer"]
+                                    
+                                    if possible_answer is not None:
+                                        st.write("**Ground Truth:**")
+                                        with st.expander("View Ground Truth", expanded=True):
+                                            st.json(possible_answer)
+                                    
                                     if score_result and "error" in score_result:
                                         st.write("**Error:**")
                                         error_list = score_result["error"]
@@ -678,8 +762,15 @@ def main():
                                     if score_result and "error_details" in score_result:
                                         st.write("**Error Details:**")
                                         st.error(score_result["error_details"])
+                                    
+                                    if score_result and "http_request" in score_result:
+                                        st.write("**HTTP Request:**")
+                                        with st.expander("View HTTP Request", expanded=False):
+                                            st.json(score_result["http_request"])
+                    else:
+                        st.info("No results found for this question.")
                 else:
-                    st.info("No results found for this question.")
+                    st.info("No questions match the selected filters.")
     else:
         st.info("No test data found. Make sure test data files are in the bfcl_eval/data directory.")
 

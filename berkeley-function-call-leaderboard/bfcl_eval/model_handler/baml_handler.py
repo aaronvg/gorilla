@@ -17,7 +17,7 @@ from bfcl_eval.model_handler.baml_utils import (
 try:
     from bfcl_eval.baml_client import b
     from bfcl_eval.baml_client.type_builder import TypeBuilder
-    from baml_py import ClientRegistry
+    from baml_py import ClientRegistry, Collector
 except ImportError:
     raise ImportError(
         "BAML is required when using --tool-format baml. "
@@ -144,15 +144,16 @@ class BAMLHandler(BaseHandler):
                 enum_values = schema["enum"]
                 return tb.union([tb.literal_string(val) for val in enum_values])
             return tb.string()
-        elif schema_type == "number":
+        elif schema_type == "number" or schema_type == "float":
             return tb.float()
         elif schema_type == "integer":
             return tb.int()
         elif schema_type == "boolean":
             return tb.bool()
         elif schema_type == "array":
+            items_schema = schema.get("items", {"type": "string"})
             item_type = self._get_baml_field_type(
-                schema.get("items", {"type": "string"}), tb, required=True
+                items_schema, tb, required=True
             )
             return item_type.list()
         elif schema_type == "object":
@@ -443,10 +444,11 @@ class BAMLHandler(BaseHandler):
 
         # Mock classes for responses
         class MockResponse:
-            def __init__(self, result, test_category, functions_data):
+            def __init__(self, result, test_category, functions_data, raw_llm_response=None):
                 self.result = result
                 self.test_category = test_category
                 self.functions_data = functions_data
+                self.raw_llm_response = raw_llm_response
                 self.choices = [MockChoice(result)]
 
         class MockChoice:
@@ -486,6 +488,9 @@ class BAMLHandler(BaseHandler):
                 # Get the appropriate BAML function
                 baml_function = getattr(b, baml_function_name)
 
+                # Create a collector to capture HTTP requests
+                collector = Collector(name=f"baml-{baml_function_name}")
+
                 # Call BAML function with Function[] format
                 result = baml_function(
                     functions=functions_data,
@@ -493,12 +498,35 @@ class BAMLHandler(BaseHandler):
                     baml_options={
                         "client_registry": client_registry,
                         "tb": type_builder,
+                        "collector": collector,
                     },
                 )
                 end_time = time.time()
 
+                # Extract HTTP request information and raw response from collector
+                http_request_info = None
+                raw_llm_response = None
+                if collector.last:
+                    # Get raw LLM response
+                    raw_llm_response = collector.last.raw_llm_response
+                    
+                    # Get HTTP request
+                    if collector.last.calls:
+                        last_call = collector.last.calls[-1]
+                        if hasattr(last_call, 'http_request'):
+                            http_req = last_call.http_request
+                            http_request_info = {
+                                "url": http_req.url,
+                                "method": http_req.method,
+                                "body": http_req.body.json() if hasattr(http_req.body, 'json') else str(http_req.body),
+                            }
+                
+                # Store HTTP request in inference data
+                inference_data["http_request"] = http_request_info
+                inference_data["raw_llm_response"] = raw_llm_response
+
                 return (
-                    MockResponse(result, test_category, functions_data),
+                    MockResponse(result, test_category, functions_data, raw_llm_response),
                     end_time - start_time,
                 )
 
@@ -756,6 +784,9 @@ class BAMLHandler(BaseHandler):
             else model_responses
         )
 
+        # Get raw LLM response if available
+        raw_llm_response = getattr(api_response, "raw_llm_response", None)
+        
         return {
             "model_responses": model_responses,
             "model_responses_message_for_chat_history": model_responses_message_for_chat_history,
@@ -763,6 +794,7 @@ class BAMLHandler(BaseHandler):
             "input_token": 0,  # BAML doesn't provide token counts by default
             "output_token": 0,
             "reasoning_content": "",
+            "raw_llm_response": raw_llm_response,
         }
 
     def add_first_turn_message_FC(
