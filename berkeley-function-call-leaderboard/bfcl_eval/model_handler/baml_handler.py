@@ -634,8 +634,8 @@ class BAMLHandler(BaseHandler):
                         if v is not None and k != "function_name"
                     }
 
-                    # Create the FC format response
-                    model_responses = [{func_name: json.dumps(params)}]
+                    # Create the FC format response - ensure proper JSON serialization with correct types
+                    model_responses = [{func_name: json.dumps(params, ensure_ascii=False)}]
                     tool_call_ids = [func_name]
                 else:
                     # For other test types, we'll need to implement parsing logic
