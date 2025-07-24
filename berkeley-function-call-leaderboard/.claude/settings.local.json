@@ -4,7 +4,8 @@
       "Bash(uv run:*)",
       "Bash(grep:*)",
       "Bash(inf uv run:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

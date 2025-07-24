@@ -370,7 +370,8 @@ def main():
                                 scores = data["models"][model_name][category]
                                 for score in scores[1:]:  # Skip overall stats
                                     if score.get("id") == question_id:
-                                        is_valid = score.get("valid", False)
+                                        # If we found the question in scores and valid is False, it's a failure
+                                        is_valid = score.get("valid", True)
                                         if not is_valid:
                                             if "-baml" in model_name:
                                                 has_baml_failure = True
@@ -495,11 +496,21 @@ def main():
                                         score_result = score
                                         break
                             
+                            # When valid field is missing or True, the test passed
+                            # When valid is False, the test failed
+                            is_valid = True
+                            if score_result:
+                                if "valid" in score_result:
+                                    is_valid = score_result["valid"]
+                            else:
+                                # No score result means it might have passed
+                                is_valid = True
+                            
                             result_data = {
                                 "model_name": model_name,
                                 "question_result": question_result,
                                 "score_result": score_result,
-                                "is_valid": score_result.get("valid", True) if score_result else True
+                                "is_valid": is_valid
                             }
                             
                             if "-baml" in model_name:
