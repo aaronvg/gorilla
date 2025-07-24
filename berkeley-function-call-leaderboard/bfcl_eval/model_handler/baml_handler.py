@@ -7,7 +7,9 @@ from bfcl_eval.model_handler.base_handler import BaseHandler
 from bfcl_eval.model_handler.model_style import ModelStyle
 from bfcl_eval.model_handler.utils import (
     func_doc_language_specific_pre_processing,
+    convert_to_tool,
 )
+from bfcl_eval.constants.type_mappings import GORILLA_TO_OPENAPI
 from bfcl_eval.model_handler.baml_utils import (
     detect_baml_provider,
 )
@@ -33,6 +35,9 @@ class BAMLHandler(BaseHandler):
         self.original_model_name = model_name
         self.model_style = ModelStyle.OpenAI_Completions  # Default style
         self.is_fc_model = True  # BAML always works in FC mode
+        self.underscore_to_dot = (
+            True  # Default value, will be overridden by eval_runner
+        )
         self.base_url = self._get_base_url_from_model_name()
 
     def _get_base_url_from_model_name(self) -> Optional[str]:
@@ -62,6 +67,45 @@ class BAMLHandler(BaseHandler):
         cr.add_llm_client(name="DynamicClient", provider=provider, options=options)
         cr.set_primary("DynamicClient")
         return cr
+
+    def _convert_param_value(self, param_value: str):
+        """Convert string parameter values to appropriate Python types."""
+        # Handle None
+        if param_value == "None":
+            return None
+
+        # Handle boolean values
+        if param_value in ("True", "true"):
+            return True
+        elif param_value in ("False", "false"):
+            return False
+
+        # Handle numbers (including scientific notation)
+        try:
+            # Try scientific notation first
+            if "e" in param_value.lower():
+                return float(param_value)
+            # Try float
+            elif "." in param_value:
+                return float(param_value)
+            # Try int
+            else:
+                return int(param_value)
+        except ValueError:
+            # Not a number, keep as string
+            pass
+
+        # Handle arrays (basic parsing)
+        if param_value.startswith("[") and param_value.endswith("]"):
+            try:
+                # Use json.loads for proper array parsing
+                return json.loads(param_value)
+            except json.JSONDecodeError:
+                # If JSON parsing fails, keep as string
+                pass
+
+        # Keep as string by default
+        return param_value
 
     def _get_api_key(self, provider: str) -> str:
         """Get the appropriate API key for the provider."""
@@ -288,42 +332,36 @@ class BAMLHandler(BaseHandler):
 
     def decode_ast(self, result, language="Python"):
         """Decode AST from BAML response."""
-        # result should be a list of function calls in FC format: [{"func_name": "json_string"}]
+        # BAML results are already in FC format, so we need to handle them like FC models
         if result is None:
             return []
 
         decoded_output = []
-        
+
         if isinstance(result, list):
             for invoked_function in result:
                 if invoked_function and isinstance(invoked_function, dict):
                     name = list(invoked_function.keys())[0]
                     params_json = invoked_function[name]
-                    
-                    # Parse the JSON string back to dict
+
+                    # Parse the JSON string back to dict (same as FC handler)
                     try:
                         params = (
                             json.loads(params_json)
                             if isinstance(params_json, str)
                             else params_json
                         )
-                        # Remove None values and function_name if it exists
-                        params = {
-                            key: value
-                            for key, value in params.items()
-                            if value is not None and key != "function_name"
-                        }
-                        
+
                         # Convert values to strings for Java/JavaScript
                         if language in ["Java", "JavaScript"]:
                             for key in params:
                                 params[key] = str(params[key])
-                        
+
                         decoded_output.append({name: params})
                     except (json.JSONDecodeError, TypeError):
                         # Handle case where params_json is not valid JSON
                         decoded_output.append({name: {}})
-        
+
         return decoded_output
 
     def decode_execute(self, result):
@@ -370,7 +408,6 @@ class BAMLHandler(BaseHandler):
         """Determine which BAML function to call based on test characteristics."""
         functions = test_entry.get("function", [])
         test_id = test_entry.get("id", "")
-
         num_functions = len(functions)
 
         # Check test ID for hints about test type
@@ -388,7 +425,7 @@ class BAMLHandler(BaseHandler):
             return "SimpleFunction"
 
     def _query_FC(self, inference_data: dict):
-        """Execute BAML function call."""
+        """Execute BAML function call with retry logic."""
         user_query = inference_data["user_query"]
         functions_data = inference_data["functions_data"]
         client_registry = inference_data["client_registry"]
@@ -404,52 +441,77 @@ class BAMLHandler(BaseHandler):
             "baml_function": baml_function_name,
         }
 
+        # Mock classes for responses
+        class MockResponse:
+            def __init__(self, result, test_category, functions_data):
+                self.result = result
+                self.test_category = test_category
+                self.functions_data = functions_data
+                self.choices = [MockChoice(result)]
+
+        class MockChoice:
+            def __init__(self, result):
+                self.message = MockMessage(result)
+
+        class MockMessage:
+            def __init__(self, result):
+                self.content = (
+                    json.dumps(result) if isinstance(result, dict) else str(result)
+                )
+
+        class MockErrorResponse:
+            def __init__(self, error):
+                self.result = str(error)
+                self.choices = [MockErrorChoice(str(error))]
+
+        class MockErrorChoice:
+            def __init__(self, result):
+                self.message = MockErrorMessage(result)
+
+        class MockErrorMessage:
+            def __init__(self, result):
+                self.content = (
+                    json.dumps(result) if isinstance(result, dict) else str(result)
+                )
+
+        # Retry configuration
+        max_retries = 3
+        retry_delay = 1  # seconds
+
         start_time = time.time()
-        try:
-            # Get the appropriate BAML function
-            baml_function = getattr(b, baml_function_name)
+        last_exception = None
 
-            # Call BAML function with Function[] format
-            result = baml_function(
-                functions=functions_data,
-                query=user_query,
-                baml_options={"client_registry": client_registry, "tb": type_builder},
-            )
-            end_time = time.time()
+        for attempt in range(max_retries):
+            try:
+                # Get the appropriate BAML function
+                baml_function = getattr(b, baml_function_name)
 
-            # Mock response structure to match expected format
-            class MockResponse:
-                def __init__(self, result, test_category, functions_data):
-                    self.result = result
-                    self.test_category = test_category
-                    self.functions_data = functions_data
-                    self.choices = [MockChoice(result)]
+                # Call BAML function with Function[] format
+                result = baml_function(
+                    functions=functions_data,
+                    query=user_query,
+                    baml_options={
+                        "client_registry": client_registry,
+                        "tb": type_builder,
+                    },
+                )
+                end_time = time.time()
 
-            class MockChoice:
-                def __init__(self, result):
-                    self.message = MockMessage(result)
+                return (
+                    MockResponse(result, test_category, functions_data),
+                    end_time - start_time,
+                )
 
-            class MockMessage:
-                def __init__(self, result):
-                    self.content = (
-                        json.dumps(result) if isinstance(result, dict) else str(result)
-                    )
-
-            return (
-                MockResponse(result, test_category, functions_data),
-                end_time - start_time,
-            )
-
-        except Exception as e:
-            end_time = time.time()
-
-            # Return error as content
-            class MockErrorResponse:
-                def __init__(self, error):
-                    self.result = str(error)
-                    self.choices = [MockChoice(str(error))]
-
-            return MockErrorResponse(e), end_time - start_time
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    # Final attempt failed
+                    end_time = time.time()
+                    return MockErrorResponse(e), end_time - start_time
 
     def _pre_query_processing_FC(self, inference_data: dict, test_entry: dict) -> dict:
         """Pre-process query for FC mode."""
@@ -464,6 +526,11 @@ class BAMLHandler(BaseHandler):
         # Process functions like other handlers
         functions = func_doc_language_specific_pre_processing(functions, test_category)
 
+        # Apply the same transformations as FC handlers (including dot-to-underscore conversion)
+        transformed_tools = convert_to_tool(
+            functions, GORILLA_TO_OPENAPI, ModelStyle.OpenAI_Completions
+        )
+
         # Determine which BAML function to call
         baml_function_name = self._determine_baml_function(test_entry)
 
@@ -475,10 +542,11 @@ class BAMLHandler(BaseHandler):
         client_registry = self._create_client_registry()
 
         # Convert functions to the format expected by BAML functions
+        # Use the transformed tools to get the correct function names (with dots converted to underscores)
         functions_data = []
-        for func in functions:
-            if "function" in func:
-                func_info = func["function"]
+        for tool in transformed_tools:
+            if "function" in tool:
+                func_info = tool["function"]
                 functions_data.append(
                     {
                         "name": func_info["name"],
@@ -488,8 +556,8 @@ class BAMLHandler(BaseHandler):
             else:
                 functions_data.append(
                     {
-                        "name": func.get("name", "UnknownFunction"),
-                        "description": func.get("description", ""),
+                        "name": tool.get("name", "UnknownFunction"),
+                        "description": tool.get("description", ""),
                     }
                 )
 
@@ -509,7 +577,6 @@ class BAMLHandler(BaseHandler):
             result = api_response.result
             test_category = getattr(api_response, "test_category", "simple")
             functions_data = getattr(api_response, "functions_data", [])
-
 
             is_simple = test_category in [
                 "relevance",
@@ -531,41 +598,42 @@ class BAMLHandler(BaseHandler):
             model_responses = []
             tool_call_ids = []
 
-            # Handle case where BAML returns a Response object with string representation
-            if hasattr(result, '__class__') and 'Response' in str(type(result)):
-                # BAML Response object - need to convert string representation to dict
-                result_str = str(result)
-                
+            # Handle case where BAML returns a Response object (Pydantic model)
+            if hasattr(result, "__class__") and "Response" in str(type(result)):
+                # BAML Response object - use Pydantic's model_dump() method for proper conversion
+                try:
+                    # Use Pydantic's model_dump() method to convert to dict
+                    result_dict = result.model_dump()
+                except (AttributeError, TypeError):
+                    # Fallback: try to access result as dict-like object or __dict__
+                    try:
+                        result_dict = (
+                            dict(result)
+                            if hasattr(result, "__iter__") and hasattr(result, "items")
+                            else result.__dict__
+                        )
+                    except (AttributeError, TypeError):
+                        result_dict = {}
+                        for attr in dir(result):
+                            if not attr.startswith("_") and not callable(
+                                getattr(result, attr, None)
+                            ):
+                                try:
+                                    result_dict[attr] = getattr(result, attr)
+                                except (AttributeError, TypeError):
+                                    continue
+
                 # For simple functions, infer function name from functions_data
                 if is_simple and functions_data and len(functions_data) == 1:
                     func_name = functions_data[0]["name"]
-                    
-                    # Parse the string representation "param1=value1 param2=value2"
-                    params = {}
-                    if result_str and result_str != "None":
-                        # Split by spaces, but handle quoted values
-                        import re
-                        # Match param=value or param='value with spaces'
-                        matches = re.findall(r'(\w+)=([\'"]?)([^\'"]+?)\2(?:\s|$)', result_str)
-                        for param_name, _, param_value in matches:
-                            # Convert None string to actual None
-                            if param_value == "None":
-                                param_value = None
-                            else:
-                                # Try to parse numbers
-                                try:
-                                    if '.' in param_value:
-                                        param_value = float(param_value)
-                                    else:
-                                        param_value = int(param_value)
-                                except ValueError:
-                                    # Keep as string
-                                    pass
-                            
-                            # Only add non-None values to params
-                            if param_value is not None:
-                                params[param_name] = param_value
-                    
+
+                    # Filter out None values and function_name if it exists
+                    params = {
+                        k: v
+                        for k, v in result_dict.items()
+                        if v is not None and k != "function_name"
+                    }
+
                     # Create the FC format response
                     model_responses = [{func_name: json.dumps(params)}]
                     tool_call_ids = [func_name]
@@ -574,7 +642,7 @@ class BAMLHandler(BaseHandler):
                     # For now, return empty response
                     model_responses = []
                     tool_call_ids = []
-                    
+
             elif isinstance(result, list):
                 # Response[] - multiple function calls (parallel functions)
                 for call in result:

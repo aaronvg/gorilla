@@ -36,6 +36,16 @@ def get_handler(model_name):
             from bfcl_eval.model_handler.baml_handler import BAMLHandler
             handler = BAMLHandler(original_model_name, temperature=0)
             handler.is_fc_model = True  # BAML always works in FC mode
+            
+            # Check if there's a corresponding -FC model config to inherit underscore_to_dot from
+            fc_model_name = f"{original_model_name}-FC"
+            if fc_model_name in MODEL_CONFIG_MAPPING:
+                fc_config = MODEL_CONFIG_MAPPING[fc_model_name]
+                handler.underscore_to_dot = fc_config.underscore_to_dot
+            else:
+                # Default to True for BAML FC models (most FC models need this)
+                handler.underscore_to_dot = True
+            
             return handler
         else:
             # Fallback: try the full name in case it's actually configured
@@ -46,6 +56,7 @@ def get_handler(model_name):
         model_name, temperature=0
     )  # Temperature doesn't matter for evaluation
     handler.is_fc_model = config.is_fc_model
+    handler.underscore_to_dot = config.underscore_to_dot
     return handler
 
 

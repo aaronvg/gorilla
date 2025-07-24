@@ -74,13 +74,18 @@ def get_possible_answer_type(possible_answer: list):
 
 def convert_func_name(function_name, model_name: str):
     model_name_escaped = model_name.replace("_", "/")
-    # Strip -baml suffix for model config lookup
-    if model_name_escaped.endswith("-baml"):
+    
+    # Handle -baml suffix - treat all BAML models as FC models that need underscore conversion
+    is_baml_model = model_name_escaped.endswith("-baml")
+    if is_baml_model:
         model_name_escaped = model_name_escaped[:-5]
+    
     if "." in function_name:
-        if MODEL_CONFIG_MAPPING[model_name_escaped].underscore_to_dot:
+        # Apply underscore conversion if it's a BAML model OR if the base model config requires it
+        needs_underscore_conversion = is_baml_model or MODEL_CONFIG_MAPPING[model_name_escaped].underscore_to_dot
+        if needs_underscore_conversion:
             # OAI does not support "." in the function name so we replace it with "_". ^[a-zA-Z0-9_-]{1,64}$ is the regex for the name.
-            # This happens for OpenAI, Mistral, and Google models
+            # This happens for OpenAI, Mistral, Google models, and all BAML models
             return re.sub(r"\.", "_", function_name)
     return function_name
 
