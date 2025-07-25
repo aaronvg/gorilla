@@ -33,6 +33,8 @@ function ParallelFunction(functions: Function[], query: string) -> Response[] {
         Pretend you are trying to fill out multiple API calls to a function '{{ functions[0].name }}'. The goal is {{ functions[0].description }}
 
         If a parameter isn't explicitly mentioned, don't assume any values unless its certain.
+      
+        For null fields, WRITE THE DEFAULT VALUE.
 
         {{ ctx.output_format }}
 
@@ -48,6 +50,9 @@ function MultipleFunctions(functions: Function[], query: string) -> Response {
 
         If a parameter isn't explicitly mentioned, don't assume any values unless its certain.
 
+        For null fields, WRITE THE DEFAULT VALUE.
+
+
         {{ ctx.output_format }}
 
         {{ _.role('user') }}
@@ -62,6 +67,8 @@ function ParallelMultipleFunctions(functions: Function[], query: string) -> Resp
 
         If a parameter isn't explicitly mentioned, don't assume any values unless its certain.
 
+        For null fields, WRITE THE DEFAULT VALUE.
+
         {{ ctx.output_format }}
 
         {{ _.role('user') }}
@@ -75,6 +82,8 @@ function RelevanceFunction(functions: Function[], query: string) -> Response? {
         Pretend you are trying to fill out an api request to a function called '{{ functions[0].name }}'. The goal is {{ functions[0].description }}
 
         If a parameter isn't explicitly mentioned, don't assume any values unless its certain. If function '{{ functions[0].name }}' doesn't seem relevant, return null.
+
+        For null fields, WRITE THE DEFAULT VALUE.
 
         {{ ctx.output_format }}
 
