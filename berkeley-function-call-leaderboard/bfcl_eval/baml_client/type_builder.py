@@ -117,6 +117,7 @@ class ResponseBuilder(ResponseAst):
     def add_property(self, name: str, type: baml_py.FieldType) -> baml_py.ClassPropertyBuilder:
         if name in self._properties:
             raise ValueError(f"Property {name} already exists.")
+        self._properties.add(name)
         return self._bldr.property(name).type(type)
 
     def list_properties(self) -> typing.List[typing.Tuple[str, baml_py.ClassPropertyBuilder]]:

@@ -152,9 +152,7 @@ class BAMLHandler(BaseHandler):
             return tb.bool()
         elif schema_type == "array":
             items_schema = schema.get("items", {"type": "string"})
-            item_type = self._get_baml_field_type(
-                items_schema, tb, required=True
-            )
+            item_type = self._get_baml_field_type(items_schema, tb, required=True)
             return item_type.list()
         elif schema_type == "object":
             # Handle nested object by creating a new class
@@ -201,12 +199,13 @@ class BAMLHandler(BaseHandler):
             "simple",
             "parallel_function",
             "executable_simple",
-            "executable_parallel_function",
+            "executable_parallel",
             "rest",
         ]
         is_multiple = test_category in [
+            "multiple",
             "multiple_function",
-            "parallel_multiple_function",
+            "parallel_multiple",
             "executable_multiple_function",
             "executable_parallel_multiple_function",
         ]
@@ -291,9 +290,10 @@ class BAMLHandler(BaseHandler):
                         property_builder.description(description)
 
                 tool_classes.append(func_class.type())
-
             # Add union property to Response
             tb.Response.add_property("function", tb.union(tool_classes))
+        else:
+            raise ValueError(f"Unknown schema type: {tools}")
 
     def _format_tools_for_prompt(self, tools: List[Dict[str, Any]]) -> str:
         """Format tools for inclusion in the prompt."""
@@ -444,7 +444,9 @@ class BAMLHandler(BaseHandler):
 
         # Mock classes for responses
         class MockResponse:
-            def __init__(self, result, test_category, functions_data, raw_llm_response=None):
+            def __init__(
+                self, result, test_category, functions_data, raw_llm_response=None
+            ):
                 self.result = result
                 self.test_category = test_category
                 self.functions_data = functions_data
@@ -509,24 +511,30 @@ class BAMLHandler(BaseHandler):
                 if collector.last:
                     # Get raw LLM response
                     raw_llm_response = collector.last.raw_llm_response
-                    
+
                     # Get HTTP request
                     if collector.last.calls:
                         last_call = collector.last.calls[-1]
-                        if hasattr(last_call, 'http_request'):
+                        if hasattr(last_call, "http_request"):
                             http_req = last_call.http_request
                             http_request_info = {
                                 "url": http_req.url,
                                 "method": http_req.method,
-                                "body": http_req.body.json() if hasattr(http_req.body, 'json') else str(http_req.body),
+                                "body": (
+                                    http_req.body.json()
+                                    if hasattr(http_req.body, "json")
+                                    else str(http_req.body)
+                                ),
                             }
-                
+
                 # Store HTTP request in inference data
                 inference_data["http_request"] = http_request_info
                 inference_data["raw_llm_response"] = raw_llm_response
 
                 return (
-                    MockResponse(result, test_category, functions_data, raw_llm_response),
+                    MockResponse(
+                        result, test_category, functions_data, raw_llm_response
+                    ),
                     end_time - start_time,
                 )
 
@@ -617,6 +625,7 @@ class BAMLHandler(BaseHandler):
                 "rest",
             ]
             is_multiple = test_category in [
+                "multiple",
                 "multiple_function",
                 "parallel_multiple_function",
                 "executable_multiple_function",
@@ -663,11 +672,33 @@ class BAMLHandler(BaseHandler):
                     }
 
                     # Create the FC format response - ensure proper JSON serialization with correct types
-                    model_responses = [{func_name: json.dumps(params, ensure_ascii=False)}]
+                    model_responses = [
+                        {func_name: json.dumps(params, ensure_ascii=False)}
+                    ]
                     tool_call_ids = [func_name]
+                elif is_multiple and "function" in result_dict:
+                    # For multiple functions, extract from the function union
+                    func_data = result_dict["function"]
+                    if isinstance(func_data, dict):
+                        func_name = func_data.get("function_name")
+                        if func_name:
+                            # The FC results expect this to not have dots
+                            func_name = func_name.replace(".", "_")
+                            params = {
+                                k: v
+                                for k, v in func_data.items()
+                                if k != "function_name" and v is not None
+                            }
+                            model_responses = [{func_name: json.dumps(params)}]
+                            tool_call_ids = [func_name]
+                        else:
+                            model_responses = []
+                            tool_call_ids = []
+                    else:
+                        model_responses = []
+                        tool_call_ids = []
                 else:
-                    # For other test types, we'll need to implement parsing logic
-                    # For now, return empty response
+                    # For other test types, return empty response
                     model_responses = []
                     tool_call_ids = []
 
@@ -786,7 +817,7 @@ class BAMLHandler(BaseHandler):
 
         # Get raw LLM response if available
         raw_llm_response = getattr(api_response, "raw_llm_response", None)
-        
+
         return {
             "model_responses": model_responses,
             "model_responses_message_for_chat_history": model_responses_message_for_chat_history,
