@@ -13,6 +13,8 @@
 import typing
 from baml_py import type_builder
 from baml_py import baml_py
+# These are exports, not used here, hence the linter is disabled
+from baml_py.baml_py import FieldType, EnumValueBuilder, EnumBuilder, ClassBuilder # noqa: F401 # pylint: disable=unused-import
 from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME
 
 class TypeBuilder(type_builder.TypeBuilder):
@@ -117,7 +119,6 @@ class ResponseBuilder(ResponseAst):
     def add_property(self, name: str, type: baml_py.FieldType) -> baml_py.ClassPropertyBuilder:
         if name in self._properties:
             raise ValueError(f"Property {name} already exists.")
-        self._properties.add(name)
         return self._bldr.property(name).type(type)
 
     def list_properties(self) -> typing.List[typing.Tuple[str, baml_py.ClassPropertyBuilder]]:

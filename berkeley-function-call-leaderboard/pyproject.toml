@@ -40,7 +40,7 @@ dependencies = [
     "writer-sdk>=2.1.0",
     "overrides",
     "boto3",
-    "baml-py>=0.202.1",
+    "baml-py>=0.203.1",
 ]
 
 [project.scripts]

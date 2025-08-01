@@ -56,13 +56,15 @@ class BAMLHandler(BaseHandler):
         api_key = self._get_api_key(provider)
 
         # Merge provider options with common options
+
         options = {
             "model": self.original_model_name,  # Use original model name for API calls
             "api_key": api_key,
-            "temperature": self.temperature,
             **provider_options,
             **kwargs,  # Allow override of any options
         }
+        if not self.original_model_name.startswith("o4-mini"):
+            options["temperature"] = self.temperature
 
         cr.add_llm_client(name="DynamicClient", provider=provider, options=options)
         cr.set_primary("DynamicClient")
@@ -114,7 +116,7 @@ class BAMLHandler(BaseHandler):
             "openai-responses": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
             "google-ai": "GOOGLE_API_KEY",
-            "openai-generic": "OPENAI_API_KEY",  # Most generic APIs use this format
+            "openai-generic": "MOONSHOT_API_KEY",  # Most generic APIs use this format
         }
 
         env_key = key_mapping.get(provider)
@@ -197,7 +199,7 @@ class BAMLHandler(BaseHandler):
             "java",
             "javascript",
             "simple",
-            "parallel_function",
+            "parallel",
             "executable_simple",
             "executable_parallel",
             "rest",
@@ -205,7 +207,7 @@ class BAMLHandler(BaseHandler):
         is_multiple = test_category in [
             "multiple",
             "multiple_function",
-            "parallel_multiple",
+            "parallel_multiple_function",
             "executable_multiple_function",
             "executable_parallel_multiple_function",
         ]
@@ -613,6 +615,7 @@ class BAMLHandler(BaseHandler):
             result = api_response.result
             test_category = getattr(api_response, "test_category", "simple")
             functions_data = getattr(api_response, "functions_data", [])
+            
 
             is_simple = test_category in [
                 "relevance",
@@ -857,55 +860,55 @@ class BAMLHandler(BaseHandler):
         inference_data["user_query"] = user_query
         return inference_data
 
-    def _add_assistant_message_FC(
-        self, inference_data: dict, assistant_message: dict
-    ) -> dict:
-        """Add assistant message for FC mode."""
-        # For conversation history - would need to maintain state for multi-turn
-        return inference_data
+    # def _add_assistant_message_FC(
+    #     self, inference_data: dict, assistant_message: dict
+    # ) -> dict:
+    #     """Add assistant message for FC mode."""
+    #     # For conversation history - would need to maintain state for multi-turn
+    #     return inference_data
 
-    def _add_execution_results_FC(
-        self,
-        inference_data: dict,
-        execution_results: list[dict],
-        tool_call_ids: list[str],
-    ) -> dict:
-        """Add execution results for FC mode."""
-        # For function execution results - would need to format and add to conversation
-        return inference_data
+    # def _add_execution_results_FC(
+    #     self,
+    #     inference_data: dict,
+    #     execution_results: list[dict],
+    #     tool_call_ids: list[str],
+    # ) -> dict:
+    #     """Add execution results for FC mode."""
+    #     # For function execution results - would need to format and add to conversation
+    #     return inference_data
 
     #### Prompting methods (not used with BAML but required by base class) ####
 
-    def _query_prompting(self, inference_data: dict):
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def _query_prompting(self, inference_data: dict):
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")
 
-    def _pre_query_processing_prompting(
-        self, inference_data: dict, test_entry: dict
-    ) -> dict:
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def _pre_query_processing_prompting(
+    #     self, inference_data: dict, test_entry: dict
+    # ) -> dict:
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")
 
-    def add_first_turn_message_prompting(
-        self, inference_data: dict, first_turn_message: list[dict]
-    ) -> dict:
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def add_first_turn_message_prompting(
+    #     self, inference_data: dict, first_turn_message: list[dict]
+    # ) -> dict:
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")
 
-    def _add_next_turn_user_message_prompting(
-        self, inference_data: dict, user_message: list[dict]
-    ) -> dict:
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def _add_next_turn_user_message_prompting(
+    #     self, inference_data: dict, user_message: list[dict]
+    # ) -> dict:
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")
 
-    def _add_assistant_message_prompting(
-        self, inference_data: dict, assistant_message: dict
-    ) -> dict:
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def _add_assistant_message_prompting(
+    #     self, inference_data: dict, assistant_message: dict
+    # ) -> dict:
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")
 
-    def _add_execution_results_prompting(
-        self, inference_data: dict, execution_results: list[dict]
-    ) -> dict:
-        """Not used with BAML."""
-        raise NotImplementedError("BAML handler only supports FC mode")
+    # def _add_execution_results_prompting(
+    #     self, inference_data: dict, execution_results: list[dict]
+    # ) -> dict:
+    #     """Not used with BAML."""
+    #     raise NotImplementedError("BAML handler only supports FC mode")

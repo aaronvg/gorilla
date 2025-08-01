@@ -23,6 +23,7 @@ from bfcl_eval.model_handler.api_inference.nvidia import NvidiaHandler
 from bfcl_eval.model_handler.api_inference.openai_completion import (
     OpenAICompletionsHandler,
 )
+from bfcl_eval.model_handler.api_inference.moonshot import MoonshotHandler
 from bfcl_eval.model_handler.api_inference.openai_response import OpenAIResponsesHandler
 from bfcl_eval.model_handler.api_inference.qwen import (
     QwenAgentNoThinkHandler,
@@ -291,7 +292,7 @@ api_inference_model_map = {
         url="https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/",
         org="OpenAI",
         license="Proprietary",
-        model_handler=OpenAIResponsesHandler,
+        model_handler=OpenAICompletionsHandler,
         input_price=0.15,
         output_price=0.6,
         is_fc_model=False,
@@ -303,7 +304,7 @@ api_inference_model_map = {
         url="https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/",
         org="OpenAI",
         license="Proprietary",
-        model_handler=OpenAIResponsesHandler,
+        model_handler=OpenAICompletionsHandler,
         input_price=0.15,
         output_price=0.6,
         is_fc_model=True,
@@ -2034,6 +2035,42 @@ third_party_inference_model_map = {
         is_fc_model=True,
         underscore_to_dot=False,
     ),
+    "kimi-k2-0711-preview-FC": ModelConfig(
+        model_name="kimi-k2-0711-preview-FC",
+        display_name="Moonshotai-Kimi-K2-Instruct (FC)",
+        url="https://huggingface.co/moonshotai/Kimi-K2-Instruct",
+        org="MoonshotAI",
+        license="modified-mit",
+        model_handler=MoonshotHandler,
+        input_price=None,
+        output_price=None,
+        is_fc_model=True,
+        underscore_to_dot=True,
+    ),
+    "kimi-k2-0711-preview": ModelConfig(
+        model_name="kimi-k2-0711-preview",
+        display_name="Moonshotai-Kimi-K2-Instruct (Prompt)",
+        url="https://huggingface.co/moonshotai/Kimi-K2-Instruct",
+        org="MoonshotAI",
+        license="modified-mit",
+        model_handler=MoonshotHandler,
+        input_price=None,
+        output_price=None,
+        is_fc_model=True,
+        underscore_to_dot=True,
+    ),
+    # "moonshotai/kimi-k2-instruct": ModelConfig(
+    #     model_name="kimi-k2-0711-preview",
+    #     display_name="Moonshotai-Kimi-K2-Instruct (Prompt)",
+    #     url="https://huggingface.co/moonshotai/Kimi-K2-Instruct",
+    #     org="MoonshotAI",
+    #     license="modified-mit",
+    #     model_handler=MoonshotHandler,
+    #     input_price=None,
+    #     output_price=None,
+    #     is_fc_model=False,
+    #     underscore_to_dot=False,
+    # ),
 }
 
 

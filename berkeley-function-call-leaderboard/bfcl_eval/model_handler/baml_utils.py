@@ -7,11 +7,14 @@ except ImportError:
     # Define dummy classes when BAML is not available
     class TypeBuilder:
         pass
+
     class FieldType:
         pass
 
+
 TOOL_NAME_KEY = "$baml_tool_name$"
 TOOL_NAME_LLM_FIELD = "function_name"
+
 
 class SchemaAdder:
     def __init__(self, tb: TypeBuilder, schema: Dict[str, Any]):
@@ -33,14 +36,18 @@ class SchemaAdder:
             assert isinstance(properties, dict)
             tool_name_key = properties.pop(TOOL_NAME_KEY, None)
             if tool_name_key is not None:
-                new_cls.add_property(TOOL_NAME_KEY, self.parse(tool_name_key)).alias(TOOL_NAME_LLM_FIELD)
-
+                new_cls.add_property(TOOL_NAME_KEY, self.parse(tool_name_key)).alias(
+                    TOOL_NAME_LLM_FIELD
+                )
 
             for field_name, field_schema in properties.items():
                 assert isinstance(field_schema, dict)
                 default_value = field_schema.get("default")
                 # Handle case when properties are not defined, BAML expects `map<string, string>`
-                if field_schema.get("properties") is None and field_schema.get("type") == "object":
+                if (
+                    field_schema.get("properties") is None
+                    and field_schema.get("type") == "object"
+                ):
                     # warnings.warn(
                     #     f"Field '{field_name}' uses generic dict type which defaults to Dict[str, str]. "
                     #     "If a more specific type is needed, please provide a specific Pydantic model instead.",
@@ -97,11 +104,19 @@ class SchemaAdder:
             assert isinstance(any_of, list)
             return self.tb.union([self.parse(sub_schema) for sub_schema in any_of])
 
-        if additional_properties := json_schema.get("additionalProperties"):                
+        if additional_properties := json_schema.get("additionalProperties"):
             if isinstance(additional_properties, dict):
                 if any_of_additional_props := additional_properties.get("anyOf"):
                     assert isinstance(any_of_additional_props, list)
-                    return self.tb.map(self.tb.string(), self.tb.union([self.parse(sub_schema) for sub_schema in any_of_additional_props]))
+                    return self.tb.map(
+                        self.tb.string(),
+                        self.tb.union(
+                            [
+                                self.parse(sub_schema)
+                                for sub_schema in any_of_additional_props
+                            ]
+                        ),
+                    )
 
         if ref := json_schema.get("$ref"):
             assert isinstance(ref, str)
@@ -133,7 +148,10 @@ def parse_json_schema(json_schema: Dict[str, Any], tb: TypeBuilder) -> FieldType
     parser = SchemaAdder(tb, json_schema)
     return parser.parse(json_schema)
 
-def parse_tools(scheme_file_path: str, tb: TypeBuilder) -> Dict[str, tuple[FieldType, Dict[str, Any]]]:
+
+def parse_tools(
+    scheme_file_path: str, tb: TypeBuilder
+) -> Dict[str, tuple[FieldType, Dict[str, Any]]]:
     with open(scheme_file_path, "r") as f:
         schema = json.load(f)
     loaded_tools = {}
@@ -159,40 +177,42 @@ def parse_tools(scheme_file_path: str, tb: TypeBuilder) -> Dict[str, tuple[Field
     return loaded_tools
 
 
-def detect_baml_provider(model_name: str, base_url: Optional[str] = None) -> tuple[str, dict]:
+def detect_baml_provider(
+    model_name: str, base_url: Optional[str] = None
+) -> tuple[str, dict]:
     """Auto-detect BAML provider and return (provider, options)."""
     model_lower = model_name.lower()
-    
+
     # Simple prefix detection
-    if model_lower.startswith(('gpt-', 'o1-')):
-        return 'openai', {}
-    elif model_lower.startswith('o3-'):
-        return 'openai-responses', {}
-    elif model_lower.startswith('claude-'):
-        return 'anthropic', {}
-    elif model_lower.startswith(('gemini-', 'models/gemini-')):
-        return 'google-ai', {}
-    elif model_lower.startswith('bedrock/'):
-        return 'aws-bedrock', {}
-    elif model_lower.startswith('azure/'):
-        return 'azure-openai', {}
+    if model_lower.startswith(("gpt-", "o1-")):
+        return "openai", {}
+    elif model_lower.startswith(("o3-", "o4-")):
+        return "openai-responses", {}
+    elif model_lower.startswith("claude-"):
+        return "anthropic", {}
+    elif model_lower.startswith(("gemini-", "models/gemini-")):
+        return "google-ai", {}
+    elif model_lower.startswith("bedrock/"):
+        return "aws-bedrock", {}
+    elif model_lower.startswith("azure/"):
+        return "azure-openai", {}
     else:
         # Default to openai-generic with base_url
         if not base_url:
             # Try to infer base_url from known providers
-            if 'llama' in model_lower:
-                base_url = 'https://llama-api.meta.com/compat/v1'
-            elif 'mistral' in model_lower:
-                base_url = 'https://api.mistral.ai/v1'
-            elif 'deepseek' in model_lower:
-                base_url = 'https://api.deepseek.com/v1'
-            elif 'qwen' in model_lower:
-                base_url = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+            if "llama" in model_lower:
+                base_url = "https://llama-api.meta.com/compat/v1"
+            elif "mistral" in model_lower:
+                base_url = "https://api.mistral.ai/v1"
+            elif "deepseek" in model_lower:
+                base_url = "https://api.deepseek.com/v1"
+            elif "qwen" in model_lower:
+                base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
             else:
                 raise ValueError(
                     f"Cannot auto-detect provider for model '{model_name}'. "
                     f"BAML supports: OpenAI, Anthropic, Google AI, AWS Bedrock, "
                     f"Azure OpenAI, and OpenAI-compatible APIs."
                 )
-        
-        return 'openai-generic', {'base_url': base_url}
+
+        return "openai-generic", {"base_url": base_url}
